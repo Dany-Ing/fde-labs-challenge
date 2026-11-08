@@ -1,0 +1,5 @@
+# Fixed-integration files for "The Data Room" — DO NOT MODIFY.
+# These are validated by the judges against these exact SHA-256 hashes.
+6eff10b52ef8d5952c50b3806e8fc392c1214e03aa642b8c0e462f5038d7b947  mock_erp/app.py
+1ca9c6d31705c809a4a55d9325ce91d61e961117352fff6df44ad31e75f06144  schema/contract.schema.json
+9f5dcfc0c8d56f3dea218926dc7c81610c440ffc7954a093584c734934551822  schema/results.schema.json

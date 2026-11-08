@@ -1,0 +1,8 @@
+vendor,type,amount,ccy,start,renew,liability,law,notes
+"Acme Corporation",MSA,250000,USD,2024-03-01,2025-03-01,500000,Delaware USA,"migrated from legacy - matches MSA on file"
+"Initech",nda,,,,2024-09-01,,TX,"no value - NDA"
+,PO,9999,USD,,,, ,"row missing vendor - junk?"
+"Wayne Enterprises",po,40000,usd,2025-02-20,,,NJ,"WE-5567"
+"Vandelay Industries",MSA,"1,250,000",USD,2025-05-01,2026-05-01,uncapped,New York,"latex importer - liability UNCAPPED"
+"globex gmbh",purchase order,12000000,JPY,2025-01-10,,,Tokyo,"sensors"
+zzz,,,,,,,,"garbage row"

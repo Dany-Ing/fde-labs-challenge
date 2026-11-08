@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://atlas-industrial.example/schemas/results.schema.json",
+  "title": "Atlas Industrial — Run Artifact (results.json)",
+  "description": "The envelope your system commits as its run record on the provided data room. Two arrays: every document ends up in exactly one of them. 'loaded' holds the schema-conformant records you POSTed to /contracts; 'escalations' holds what you routed to /escalate (escalate) or quarantined. The contract records inside 'loaded' must conform to contract.schema.json — the same schema the API enforces. We score this artifact against the answer key; you may add extra keys anywhere (we ignore what we don't read).",
+  "type": "object",
+  "required": ["loaded", "escalations"],
+  "properties": {
+    "loaded": {
+      "type": "array",
+      "description": "Records you successfully loaded. Each must conform to contract.schema.json (the API would have 422'd it otherwise).",
+      "items": {
+        "type": "object",
+        "required": ["source_document"],
+        "properties": {
+          "source_document": {
+            "type": "string",
+            "description": "Filename of the originating document (e.g. '001_acme_msa.pdf')."
+          }
+        }
+      }
+    },
+    "escalations": {
+      "type": "array",
+      "description": "Documents you routed to human review or quarantined. One entry per such document.",
+      "items": {
+        "type": "object",
+        "required": ["source_document", "kind", "reason"],
+        "properties": {
+          "source_document": {
+            "type": "string",
+            "description": "Filename of the originating document, or a source token for CSV-only rows (e.g. 'legacy_export.csv')."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["escalate", "quarantine"],
+            "description": "'escalate' = route to human review (ambiguous/high-risk); 'quarantine' = content tried to manipulate the agent."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why you took this action — your logged rationale."
+          },
+          "record": {
+            "type": ["object", "null"],
+            "description": "Optional partial record (best human-readable values). Not required to be schema-conformant."
+          }
+        }
+      }
+    }
+  }
+}
