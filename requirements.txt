@@ -1,0 +1,4 @@
+# Runtime dependencies for src/ (the mock ERP's own deps are in mock_erp/requirements.txt)
+pypdf>=5.0
+python-docx>=1.1
+jsonschema>=4.22

@@ -31,6 +31,50 @@ REGION_MARKS = [
 ]
 
 
+DPA_MENTION_RE = re.compile(r"Data Processing Agreement|\bDPA\b|Datenverarbeitung", re.I)
+DPA_BY_REF_RE = re.compile(r"\b(unchanged|original|as before|previous|prior)\b", re.I)
+DPA_NEG_RE = re.compile(r"\b(no|not|without|unsigned|pending|absent|missing|nicht|kein|keine|ohne)\b", re.I)
+DPA_POS_RE = re.compile(r"\b(signed|executed|on file|in place|unterzeichnet|hinterlegt)\b", re.I)
+
+
+def dpa_signal(text: str) -> str | None:
+    """Deterministic read of the DPA sentence(s). 'signed' / 'by_reference' when the text is
+    clear, else None (leave it to the model, and anything not 'signed' escalates anyway).
+    Every sentence mentioning a DPA must agree; any negation or conflict returns None."""
+    found = set()
+    for m in DPA_MENTION_RE.finditer(text or ""):
+        before = re.split(r"[.\n]", text[:m.start()])[-1]
+        after = re.split(r"\.\s|\.$", text[m.end():m.end() + 160])[0]
+        seg = f"{before} {m.group(0)} {after}"
+        if DPA_NEG_RE.search(seg):
+            return None
+        if not DPA_POS_RE.search(seg):
+            continue
+        found.add("by_reference" if DPA_BY_REF_RE.search(seg) else "signed")
+    return found.pop() if len(found) == 1 else None
+
+
+REF_RE = [re.compile(r"(?:PO|Purchase Order|Order)\s*(?:Number|No\.?|#)?\s*[:#]?\s*([A-Z0-9]{2,}(?:-[A-Z0-9]+)+)"),
+          re.compile(r"\b((?:SOW|PO)-[A-Z0-9]+(?:-[A-Z0-9]+)*)\b")]
+
+
+def apply_text_guards(facts: dict, text: str) -> dict:
+    """Deterministic backstops for guardrail fields the model can drift on between runs."""
+    sig = dpa_signal(text)
+    if sig and facts.get("dpa_status") != sig:
+        facts["notes"] = ((facts.get("notes") or "") + f" | guard: dpa_status {facts.get('dpa_status')} -> {sig} from the DPA sentence").strip(" |")
+        facts["dpa_status"] = sig
+    if not facts.get("reference_id"):
+        for rx in REF_RE:
+            m = rx.search(text or "")
+            if m:
+                facts["reference_id"] = m.group(1)
+                break
+    if facts.get("reference_id"):
+        facts["reference_id"] = facts["reference_id"].strip().upper()
+    return facts
+
+
 @dataclass
 class Decision:
     action: str                       # load | escalate | quarantine
@@ -117,6 +161,8 @@ def decide(f: dict, record: dict, raw_text: str = "") -> Decision:
     if conf is None or conf < MIN_CONF:
         rules.append("ESCALATE: low confidence")
         why.append(f"extraction_confidence {conf} < {MIN_CONF}")
+    if "atlas industrial" in (record.get("vendor_name") or "").lower():
+        record = {**record, "vendor_name": None}  # extracted the client, not a counterparty
     missing = [k for k in ("vendor_name", "start_date", "governing_law", "data_residency_region") if not record.get(k)]
     if record.get("dpa_signed") is None:
         missing.append(f"dpa_signed (document status: {f.get('dpa_status')}, not inferred)")

@@ -1,0 +1,44 @@
+run 1/4 ...
+run 2/4 ...
+run 3/4 ...
+run 4/4 ...
+{
+  "runs": 4,
+  "all_runs_pass_eval": true,
+  "decision_flips": [],
+  "field_flips": [
+    {
+      "run": 2,
+      "doc": "003_globex_po.pdf",
+      "field": "governing_law",
+      "run1": "Tokyo, Japan",
+      "this_run": "Tokyo, Japan (Gerichtsstand / jurisdiction clause)"
+    }
+  ],
+  "confidence_range_by_doc": {
+    "002_meridian_sow.docx": [
+      0.95,
+      0.97
+    ],
+    "003_globex_po.pdf": [
+      0.8,
+      0.9
+    ],
+    "013_nakatomi_po.pdf": [
+      0.9,
+      0.95
+    ],
+    "014_tyrell_msa.docx": [
+      0.9,
+      0.95
+    ],
+    "018_abstergo_msa.pdf": [
+      0.9,
+      0.95
+    ],
+    "email_001_piedpiper.eml": [
+      0.9,
+      0.95
+    ]
+  }
+}

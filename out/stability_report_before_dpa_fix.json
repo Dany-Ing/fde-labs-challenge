@@ -1,0 +1,49 @@
+{
+  "runs": 4,
+  "all_runs_pass_eval": false,
+  "decision_flips": [
+    {
+      "run": 2,
+      "decision": "('001_acme_msa.pdf', None)",
+      "run1": null,
+      "this_run": "escalate"
+    },
+    {
+      "run": 2,
+      "decision": "001_acme_msa.pdf",
+      "run1": "load",
+      "this_run": null
+    },
+    {
+      "run": 4,
+      "decision": "('020_bluesun_po.pdf', None)",
+      "run1": null,
+      "this_run": "escalate"
+    },
+    {
+      "run": 4,
+      "decision": "020_bluesun_po.pdf",
+      "run1": "load",
+      "this_run": null
+    }
+  ],
+  "field_flips": [],
+  "confidence_range_by_doc": {
+    "003_globex_po.pdf": [
+      0.8,
+      0.9
+    ],
+    "014_tyrell_msa.docx": [
+      0.9,
+      0.95
+    ],
+    "018_abstergo_msa.pdf": [
+      0.9,
+      0.95
+    ],
+    "020_bluesun_po.pdf": [
+      0.9,
+      0.95
+    ]
+  }
+}

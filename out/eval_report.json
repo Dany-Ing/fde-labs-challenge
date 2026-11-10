@@ -1,0 +1,46 @@
+{
+  "when": "2026-11-09 17:07",
+  "note": "final pre-submission check",
+  "decisions": {
+    "total": 28,
+    "matching_labels": 28,
+    "mismatches": []
+  },
+  "straight_through_rate_pct": 47.6,
+  "docs_loaded": 10,
+  "docs_total": 21,
+  "non_load_vs_labels": {
+    "precision": 100.0,
+    "recall": 100.0,
+    "tp": 14,
+    "fp": 0,
+    "fn": 0
+  },
+  "quarantine_vs_labels": {
+    "precision": 100.0,
+    "recall": 100.0,
+    "tp": 2,
+    "fp": 0,
+    "fn": 0
+  },
+  "field_accuracy": {
+    "correct": 77,
+    "total": 77,
+    "pct": 100.0,
+    "errors": []
+  },
+  "first_try_conformant_pct": 100.0,
+  "first_try_loads": 10,
+  "guardrail_breaches": [],
+  "auditability_pct": 100.0,
+  "audit_entries": 28,
+  "throughput": {
+    "seconds_total": 122.6,
+    "seconds_per_doc": 5.8,
+    "docs_per_hour_serial": 617
+  },
+  "cost": {
+    "usd_total": 0.0101,
+    "usd_per_doc": 0.00048
+  }
+}

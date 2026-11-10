@@ -1,0 +1,10 @@
+{"when": "2026-11-09 13:55", "note": "baseline after reconcile + results.json", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:00", "note": "stability run 1", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:02", "note": "stability run 2", "straight_through_rate_pct": 42.9, "matching": 27, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:04", "note": "stability run 3", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:06", "note": "stability run 4", "straight_through_rate_pct": 42.9, "matching": 27, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:26", "note": "stability run 1", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:28", "note": "stability run 2", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:30", "note": "stability run 3", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 14:32", "note": "stability run 4", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-09 17:07", "note": "final pre-submission check", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
