@@ -58,6 +58,22 @@ REF_RE = [re.compile(r"(?:PO|Purchase Order|Order)\s*(?:Number|No\.?|#)?\s*[:#]?
           re.compile(r"\b((?:SOW|PO)-[A-Z0-9]+(?:-[A-Z0-9]+)*)\b")]
 
 
+DPA_REVIEW = {
+    "by_reference": "DPA status cannot be confirmed: the document only says the DPA is unchanged from a parent "
+                    "agreement that is not in the data room. Reviewer: get the parent agreement or ask Legal "
+                    "whether a DPA is actually on file",
+    "not_required": "DPA status not recorded as signed: the document says no DPA is required, which is not "
+                    "treated as a signed DPA. Reviewer: confirm with Legal that none is needed",
+    "not_stated": "DPA status cannot be determined: the document does not mention a DPA and it was not guessed. "
+                  "Reviewer: ask Legal whether a DPA is on file",
+}
+
+
+def dpa_review_text(status) -> str:
+    """Reviewer-facing explanation for a record that cannot set dpa_signed (field: dpa_signed)."""
+    return "dpa_signed: " + DPA_REVIEW.get(status, f"DPA status unclear (status={status}); reviewer to confirm with Legal")
+
+
 def apply_text_guards(facts: dict, text: str) -> dict:
     """Deterministic backstops for guardrail fields the model can drift on between runs."""
     sig = dpa_signal(text)
@@ -165,7 +181,7 @@ def decide(f: dict, record: dict, raw_text: str = "") -> Decision:
         record = {**record, "vendor_name": None}  # extracted the client, not a counterparty
     missing = [k for k in ("vendor_name", "start_date", "governing_law", "data_residency_region") if not record.get(k)]
     if record.get("dpa_signed") is None:
-        missing.append(f"dpa_signed (document status: {f.get('dpa_status')}, not inferred)")
+        missing.append(dpa_review_text(f.get("dpa_status")))
     if (record.get("contract_value") or 0) > 0 and ccy == "UNKNOWN":
         missing.append("currency")
     if missing:

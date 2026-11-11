@@ -1,6 +1,6 @@
 {
-  "when": "2026-11-09 17:07",
-  "note": "final pre-submission check",
+  "when": "2026-11-11 13:17",
+  "note": "after failure-handling fixes",
   "decisions": {
     "total": 28,
     "matching_labels": 28,
@@ -35,12 +35,12 @@
   "auditability_pct": 100.0,
   "audit_entries": 28,
   "throughput": {
-    "seconds_total": 122.6,
-    "seconds_per_doc": 5.8,
-    "docs_per_hour_serial": 617
+    "seconds_total": 119.7,
+    "seconds_per_doc": 5.7,
+    "docs_per_hour_serial": 632
   },
   "cost": {
-    "usd_total": 0.0101,
-    "usd_per_doc": 0.00048
+    "usd_total": 0.0138,
+    "usd_per_doc": 0.00066
   }
 }

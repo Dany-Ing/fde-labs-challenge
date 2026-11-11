@@ -48,12 +48,20 @@ Other commands:
 python src/run.py 001_acme_msa.pdf 010_soylent_msa.pdf   # just these documents (no CSV, no results.json)
 python src/run.py --reset --csv 003_globex_po.pdf        # include the CSV rows in reconciliation
 python src/stability.py 4        # run the whole pipeline 4 times and diff decisions and fields
-python -m unittest tests.test_reconcile   # unit tests, no model or ERP needed
+python -m unittest discover -s tests      # 25 unit and fault-injection tests, no model or ERP needed
 ```
 
 `src/evaluate.py` exits 1 if any hard guardrail is breached or any decision differs from the
 labels, so it works as a regression gate. `src/stability.py` overwrites `results.json` and the
 audit log with those of its last run.
+
+## Failure handling
+
+Model failures and schema rejections retry (with backoff and a repair loop) and then escalate that
+document. If the ERP is unreachable or rejects a decision, `src/run.py` retries, then lists the
+document under `undelivered` in `results.json`, prints it and exits with status 1. It also refuses to
+start if the ERP is not reachable. Details in `ARCHITECTURE.md`; each path is covered in
+`tests/test_failure_handling.py`.
 
 ## Layout
 

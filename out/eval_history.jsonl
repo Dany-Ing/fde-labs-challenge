@@ -8,3 +8,5 @@
 {"when": "2026-11-09 14:30", "note": "stability run 3", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
 {"when": "2026-11-09 14:32", "note": "stability run 4", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
 {"when": "2026-11-09 17:07", "note": "final pre-submission check", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-10 15:56", "note": "clearer DPA reviewer text", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}
+{"when": "2026-11-11 13:17", "note": "after failure-handling fixes", "straight_through_rate_pct": 47.6, "matching": 28, "total": 28, "field_pct": 100.0, "breaches": 0}

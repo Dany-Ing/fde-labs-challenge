@@ -2,7 +2,7 @@ import sys, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from reconcile import vnorm, conflicts, csv_to_facts, to_iso
-from policy import apply_text_guards, decide, build_record, dpa_signal
+from policy import apply_text_guards, decide, build_record, dpa_signal, dpa_review_text
 
 
 class T(unittest.TestCase):
@@ -64,6 +64,13 @@ class T(unittest.TestCase):
                  "vendor_name": "Atlas Industrial, Inc. and Initech LLC", "region_hint": "NA"}
         rec = build_record(facts, "x.docx")
         self.assertEqual(decide(facts, rec, "").action, "escalate")
+
+    def test_dpa_review_text_tells_reviewer_what_to_do(self):
+        self.assertIn("parent", dpa_review_text("by_reference"))
+        self.assertIn("Legal", dpa_review_text("by_reference"))
+        self.assertIn("no DPA is required", dpa_review_text("not_required"))
+        self.assertIn("not guess", dpa_review_text("not_stated"))
+        self.assertTrue(dpa_review_text("weird").startswith("dpa_signed:"))
 
 
 if __name__ == "__main__":

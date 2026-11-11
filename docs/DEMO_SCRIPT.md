@@ -119,7 +119,8 @@ curl -s -X POST localhost:8000/contracts -H 'Content-Type: application/json' -d 
   loop in `src/run.py` (function `act`): validate locally, POST, on error re-extract with the
   error list, max 2 tries, then escalate. A bad document never crashes the batch or disappears.
 - **Be honest:** on this dataset no load needed repair (10 of 10 accepted first time), so I am
-  showing the mechanism, not claiming it fired.
+  showing the mechanism, not claiming it fired. It and the ERP-down paths are covered by fault-injection
+  tests you can run: `python -m unittest discover -s tests`.
 - The better story: I ran the whole pipeline 4 times. Before a fix, 2 of 4 runs escalated a clean
   contract (the model read "DPA on file" differently run to run). One run had looked perfect.
   Fix: a deterministic text rule decides DPA status, the model is the fallback; then 4 runs with
