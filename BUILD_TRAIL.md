@@ -6,11 +6,21 @@
 
 ---
 
-## 1. Summary (fill in last)
-- What I built in 3–4 sentences.
-- Top 3 decisions that mattered most.
-- Top 3 places the AI got it wrong, and what I did about it.
-- Total time spent: ___ hours across ___ days.
+## 1. Summary
+
+**What I built.** An agentic pipeline that clears the Atlas data room: it reads every document (PDF, Word, a forwarded email) and the legacy CSV, has Claude (Haiku, run headless through Claude Code) extract raw facts, and then lets deterministic Python decide load, escalate or quarantine under the policy. A reconcile step handles duplicates, conflicts and the CSV before anything is posted to the mock ERP, with a repair loop for schema rejections and checks that fail loudly if the ERP does not record a decision. Every decision is logged with the rules that fired, a reason and a confidence, and `results.json` is generated from what the ERP accepted. On the provided data it made 28 of 28 decisions matching my own labels (10 loaded, 12 escalated, 2 quarantined, 4 CSV rows merged as duplicates), with 0 guardrail breaches, about 6 seconds and under a tenth of a cent of model cost per document, backed by 25 offline tests, an eval harness and a repeat-run stability check. The labels are not independent of the build (see section 3), and the sample is full of deliberate traps, so these are a regression baseline, not a production forecast.
+
+**Top 3 decisions that mattered most**
+1. **"LLM extracts, code decides" (D-002, D-003).** The model reports raw facts (what the DPA sentence says, whether a cap is stated, whether the text tries to instruct a system) and never chooses the action, tier or region, so document text cannot talk the system into an outcome.
+2. **Code owns fields whose meaning is a plain text rule (D-007, D-008).** After a stability check showed the same model reading the same DPA sentence differently from run to run, DPA status and reference IDs are decided by deterministic rules with the model as fallback.
+3. **A strict DPA reading, with reviewer-facing reasons (D-005, D-006, D-009).** `dpa_signed` is only true when the document itself says so. "Not required", silence and "unchanged from a parent MSA we do not have" all escalate, and each escalation tells the reviewer what to ask Legal.
+
+**Top 3 places the AI got it wrong, and what I did about it** (details in section 5)
+1. **Run-to-run variation on a guardrail field (#10).** A clean-looking run hid that 2 of 4 repeat runs escalated a contract that should load, because the model read "DPA on file" three different ways. Fix: a deterministic DPA rule, a test with the real sentences, and a re-run showing 0 flips in 4 runs.
+2. **An overclaim about failure handling (#12).** The architecture note said failures "never" lose a document, but when I asked whether failure handling was proper, fault injection showed an ERP outage crashed the whole run and a rejected escalation was silently ignored. Fix: retries, delivery checks, an `undelivered` list with exit code 1, and 15 fault-injection tests.
+3. **Gaps in the schema and prompt on the first full run (#2 to #6, #8).** Only 17 of 21 actions matched at first: jurisdiction clauses, PO order dates, SOW completion dates and the client being returned as the vendor. Fix: schema and prompt changes, guarded in code where the model drifted.
+
+**Total time spent:** ___ hours across 5 days of work (2026-11-05, then 2026-11-08 to 2026-11-11 so far).
 
 ## 2. Problem spec & approach
 - **How I read the brief:** 22 inputs (20 PDF/DOCX in `data/contracts/`, 1 `.eml`, 1 CSV with 7 data rows). Output is exactly one decision per document: `load` (POST /contracts, schema-strict), `escalate` or `quarantine` (POST /escalate with a reason). Most-restrictive wins: quarantine > escalate > load. Plus `results.json`, architecture note, KPI summary, build trail and a 5–10 min demo (all six deliverables required; demo alone is worth 7 pts).
@@ -27,10 +37,34 @@
 - **Success criteria I set:** 100% of documents have exactly one decision with a cited policy rule; 0 ERP 422s left unresolved; 0 guardrail misses (cap > $1M never loaded, injection always quarantined); no duplicate loads; deterministic policy decisions I can explain line by line. KPI targets to be set in §7 after reading `current_state.docx`.
 
 ## 3. AI tooling strategy
-- Which tools I used for which jobs (planning, coding, debugging, test generation, doc writing).
-- How I prompted: context I gave, constraints, how I split tasks, and when I used plans versus direct edits.
-- Guardrails I used on the AI itself (read-only on `mock_erp/` and `schema/`, checksum checks, tests before commit).
-- What worked, and what I'd do differently.
+
+**Which tools, for which jobs**
+- **Claude Code (Sonnet 5.5) as my build partner:** reading the pack, planning (P-001), writing the code in `src/`, writing the tests and the eval/stability scripts, debugging from run output, and drafting the docs (README, ARCHITECTURE, KPI summary, demo script, this trail).
+- **Claude (Haiku, via headless `claude -p`) as a runtime component:** the extraction step inside the product. This is separate from the build tooling: one is how I built it, the other is part of what I built (D-003, D-006).
+- Everything is driven from the repo, so Claude read the pack files directly instead of me pasting context.
+
+**How I prompted**
+- **Plan before code.** I started by asking for a plan from the brief (P-001), then built a thin slice (Acme first) before widening to all documents.
+- **Short instructions, then review.** Most of my messages were a decision or a question ("Yes, run the other 21", "are we conducting failure handling properly?"), and on several changes I approved the AI's proposed change list before it edited anything (the failure-handling fixes, the clearer DPA reason text, the demo-script rewrite).
+- **Questions as verification.** The prompts that mattered most were questions that made the AI check itself: "are we conducting failure handling properly?" (P-003), "are we able to check that?" (P-004). Each led to a real check with evidence, and P-003 found genuine gaps.
+- **I made the policy judgment calls.** Where the policy could be read two ways, I decided (non-US law counts as non-domestic; do not infer DPA status), overruling the AI's first labels twice (P-002).
+
+**Guardrails I used on the AI itself**
+- `mock_erp/` and `schema/` treated as read-only; checksums verified repeatedly (`selfcheck.py`, `shasum -c`), and both schemas re-validated independently of the self-check script.
+- The runtime extractor is boxed in: tools disabled, neutral working directory, no session persistence, the document wrapped as untrusted data, a forced JSON schema. It reports facts only; deterministic code makes every decision, and regex/text rules back up the guardrail fields the model drifted on (D-007, D-008).
+- Tests and an eval gate: 25 offline unit and fault-injection tests, plus `evaluate.py` which exits 1 on any guardrail breach or label mismatch and re-checks the guardrails on `results.json` itself, with a negative test proving it fails when it should.
+- Repeat runs (`stability.py`) because one passing run hid real variation.
+
+**What worked**
+- Hand-labelling the expected result for every input before building, so every run could be scored.
+- Thin slice first, then measuring after every change; it caught 4 wrong actions on the first full run, and later 2 flips in 4 runs.
+- Verification questions found things the AI had not volunteered.
+
+**What I'd do differently**
+- Run the repeat-run stability check and fault injection earlier; both found real problems late.
+- Have the AI recompute any number it quotes from the output instead of from memory: it once misstated the first run's matches (said 15 of 21; recount gave 17 of 21), and its docs once claimed "never to loss" before the failure paths were tested.
+- Get labels from a second source. The AI drafted my labels from reading the documents and I corrected two, so they are not independent; accuracy numbers here are a regression baseline.
+- The product hardening list is in `ARCHITECTURE.md` ("What I would harden with more time").
 
 ## 4. Decision log
 Newest at the bottom. One entry per meaningful decision.
@@ -113,7 +147,7 @@ Where the AI was wrong or I had to steer it. These are the entries that show flu
 | 8 | 2026-11-09 | Extracted the client as vendor ("Atlas Industrial, Inc. and Initech LLC"; "Atlas Industrial" for Hooli; null for Gekko) | Atlas is always the buyer; vendor must be the counterparty | CSV row 2 failed to match its document; 017 lost its vendor | Prompt rule plus policy check that rejects a vendor that is Atlas |
 | 9 | 2026-11-09 | Returned `reference_id` null for 009 although the text has "PO Number: WE-5567" | Grouping depended on it, so the Wayne conflict was missed | 008 and 009 not flagged against each other | Regex fallback over the text; unit tests |
 | 10 | 2026-11-09 | Stability check (4 full runs): 2 of 4 runs escalated a clean contract. Run 2 called Acme's "executed and is on file" DPA `by_reference`; run 4 decided Blue Sun's "Data Processing Agreement: on file" was not stated | Policy defines dpa_signed as "on file"; the same model gave three different answers to near-identical sentences, so no prompt wording would make a guardrail reliable | Wrote `src/stability.py` to diff decisions and fields across runs; the first report showed the flips, and the audit facts showed the DPA cause | Deterministic `dpa_signal` text rule decides DPA status when the sentence is clear (model is the fallback); unit test with the real sentences; re-ran the check: 0 flips in 4 runs |
-| 11 | 2026-11-10 | My `all_documents()` listed every file in `data/`, so Word lock files (`~$4_initech_nda.docx`, `~$7_gekko_nda.docx`) would have been run through the pipeline as if they were contracts | I never filtered the directory listing; it only worked because the folder was clean while I built it | Final pre-submission check: `selfcheck.py` reported "2 document(s) have NO decision" and the file names gave it away (Word had two documents open) | `all_documents()` now skips `~$` files, dotfiles and anything that is not .pdf/.docx/.eml; still exactly 21 documents. The lock files themselves are the user's to close |
+| 11 | 2026-11-09 | My `all_documents()` listed every file in `data/`, so Word lock files (`~$4_initech_nda.docx`, `~$7_gekko_nda.docx`) would have been run through the pipeline as if they were contracts | I never filtered the directory listing; it only worked because the folder was clean while I built it | Final pre-submission check: `selfcheck.py` reported "2 document(s) have NO decision" and the file names gave it away (Word had two documents open) | `all_documents()` now skips `~$` files, dotfiles and anything that is not .pdf/.docx/.eml; still exactly 21 documents. The lock files themselves are the user's to close |
 | 12 | 2026-11-11 | I wrote in ARCHITECTURE.md that failures "degrade to escalation, never to loss" and "one bad document cannot stop the batch". When I restructured the runner into analyze / reconcile / act I dropped the per-document wrapper, so `act()` had none | The claim was true only for model and validation failures. An ERP outage crashed the whole run with no `results.json`; a rejected escalation was ignored while `results.json` still said "escalated" | The user asked "are we conducting failure handling properly?"; I injected faults offline (dead ERP, 400 on escalate, failing model, bad date) instead of answering from memory | Retry with backoff in the ERP client, delivery check on every response, `undelivered` list and exit code 1, fail-safe reconcile and CSV, health check before a run, model backoff; 15 fault-injection tests; corrected the claim (D-010) |
 
 ## 6. Saved prompts & transcript excerpts
@@ -126,8 +160,72 @@ Where the AI was wrong or I had to steer it. These are the entries that show flu
 
 **What I did with it:** Accepted as a starting point. Architecture is marked "proposed" until I've read the documents and `current_state.docx`.
 
+### P-002 · 2026-11-09 · Overruling the AI's labels on the DPA rule (the human judgment call)
+**Prompts:**
+> we should not assume initech's no dpa required, I belive that should be escalated for further analysis. and what is the issue with the hooli amendment?
+
+> I would want the hooli amendment esacalated as well instead of inferring dpa_signed=true
+
+**Response (summary):** My hand labels had Initech loading with `dpa_signed=false` and Hooli loading with `dpa_signed=true`. I explained the Hooli ambiguity (the DPA is only referenced from a parent MSA that is not in the data room, and `start_date` would be the amendment date) and offered load or escalate.
+
+**What I did with it:** Both now escalate. Rule adopted: `dpa_signed` is only true when the document itself says a DPA is signed or on file (D-005, D-006). This overruled the AI's labels and set the strict reading used everywhere after.
+
+### P-003 · 2026-11-10 (asked) / 2026-11-11 (fixes) · "Are we conducting failure handling properly?" (the most valuable prompt)
+**Prompt:**
+> are we conducting failure handling properly?
+
+**Response (summary):** Instead of answering from memory I injected faults into the real code offline. Model failures, the repair loop and a bad date forever were handled. Two paths were not: an ERP outage crashed the whole run, and a rejected escalation was silently ignored while `results.json` still claimed it was escalated. I also admitted that ARCHITECTURE.md's claim "never to loss" overreached.
+
+**What I did with it:** Approved the fixes: ERP retries with backoff, delivery check on every response, an `undelivered` list and exit code 1, fail-safe reconcile and CSV, a health check before a run, and 15 fault-injection tests. Logged as iteration #12 and D-010.
+
+### P-004 · 2026-11-10 · Can the DPA claim actually be checked?
+**Prompt:**
+> For the Hooli doc, it says the DPA is on file, are we able to check that?
+
+**Response (summary):** No. The parent MSA is not in the data room, and no DPA document exists anywhere in the data, so every `dpa_signed` value is only what a contract says about itself. Pointed out the near-inconsistency with Blue Sun's bare "on file" and that the reviewer text did not tell a human what to check.
+
+**What I did with it:** Kept Hooli escalated and approved clearer reviewer-facing reason text per DPA status (D-009). Accepted the risk that an answer key reading "on file" as true would score this as a false escalation.
+
+### Transcript excerpts (tool output, trimmed)
+
+**E-001 · 2026-11-09 · First full run vs my labels (17 of 21 actions matched).** The four misses all came from my schema and prompt, not the policy (iterations #2-#6):
+```
+003_globex_po.pdf: ESCALATE   missing/undeterminable: governing_law        (expected load)
+006_hooli_amendment.docx: LOAD  Passed all policy checks; tier MEDIUM       (expected escalate)
+013_nakatomi_po.pdf: ESCALATE   missing/undeterminable: start_date          (expected load)
+020_bluesun_po.pdf: ESCALATE    missing/undeterminable: start_date          (expected load)
+```
+
+**E-002 · 2026-11-09 · Stability check before the fix (4 full runs).** One run had looked perfect, but repeat runs showed the model reading the same DPA sentence differently (iteration #10, D-008):
+```
+decision_flips:
+  run 2: 001_acme_msa.pdf   load -> escalate   (DPA "executed and is on file" read as by_reference)
+  run 4: 020_bluesun_po.pdf load -> escalate   (DPA "on file" read as not stated)
+all_runs_pass_eval: false      matching labels per run: 28, 27, 28, 27
+```
+
+**E-003 · 2026-11-09 · The same check after moving DPA status into a deterministic rule.**
+```
+runs: 4   all_runs_pass_eval: true   decision_flips: []   matching labels per run: 28, 28, 28, 28
+(only variation: one governing_law wording change, "Tokyo, Japan" vs "Tokyo, Japan (Gerichtsstand / jurisdiction clause)")
+```
+
+**E-004 · 2026-11-10 · Fault injection before the failure-handling fixes (answer to P-003).**
+```
+1 model always fails        : escalate   (extraction failed after retries)
+2 bad date -> repair loop   : load       (2 extraction calls, error list fed back)
+3 bad date forever          : escalate   (repair loop exhausted, 1 escalation sent)
+4 ERP down (load)           : CRASH URLError: Connection refused
+5 ERP down (escalate)       : CRASH URLError: Connection refused
+6 ERP rejects escalation    : act() returned normally; rejected escalation status ignored
+```
+
+**E-005 · 2026-11-09 and 2026-11-11 · Two checks that nearly misled me.**
+- `selfcheck.py` reported the demo deliverable as present because my README contained `http://localhost:8000`; its check accepts any "http" in the README (selfcheck.py line 371). No demo existed.
+- Umbrella's extraction confidence was 0.6, 0.7, 0.6, 0.6 across four runs; the low-confidence rule only fires below 0.70, so in one run that rule did not fire. The decision did not change (the over-$1M cap and the missing DPA still escalated it), but a script line saying all three rules fire would have been wrong.
+
 ## 7. Evaluation & results
-- Eval set: how I labeled expected actions, and how many documents.
+- **Eval set:** `eval/expected.json`, written on 2026-11-09 after reading all 22 inputs against the policy: 21 documents (20 contracts and the forwarded email) and 7 CSV rows, which is 28 decisions. The AI drafted the labels from the documents and I reviewed the judgment calls and corrected two (Initech and Hooli, both now escalate; P-002). Expected result: among documents 10 load, 9 escalate, 2 quarantine; among CSV rows 4 merged into their documents and 3 escalate. Field accuracy is scored on the 10 expected loads over 9 fields each where a value is labelled (tier, region, `dpa_signed`, value, currency, cap, start, renewal, termination), 77 fields in all. Judgment calls are marked `ambiguous` in the file (non-US law counts as non-domestic, PO order date as start date, an amendment's own effective date). Limit: the labels are not independent of the build, so every accuracy figure is a regression baseline, not an independent claim.
 - Metrics per iteration (keep one row per run):
 
 | Run | Date | Change made | Straight-through % | Field accuracy | Conformant % | Escalation precision | Notes |
@@ -137,8 +235,11 @@ Where the AI was wrong or I had to steer it. These are the entries that show flu
 | 2 | 2026-11-09 | Stability run before DPA fix (4 runs) | 47.6% / 42.9% / 47.6% / 42.9% | 100% | 100% | 93% precision in the 2 bad runs (1 false escalation) | 2 of 4 runs flipped a clean load to escalate; see iteration #10 |
 | 1 | 2026-11-09 | Baseline after reconcile + results.json (`python src/evaluate.py`) | 47.6% (10/21 docs) | 100% (77/77, vs my labels) | 100% (10/10 first POST) | 100% precision, 100% recall (14 of 14 non-load) | 28/28 decisions match labels, 0 guardrail breaches, 6.0 s/doc, $0.0005/doc |
 
-- Cost and throughput observations (tokens per document, seconds per document).
-- Link to the final KPI summary doc.
+- **Cost and throughput observations** (metered by Claude Code per call; extraction runs on Haiku):
+  - **Time:** 5.7 to 6.0 seconds per document on one serial stream, about 600 to 630 documents per hour; a full run of 21 documents plus the CSV takes about 2 to 2.5 minutes. The model call dominates; the local ERP and policy code are negligible. Parallel workers were not tried.
+  - **Cost:** $0.0101 to $0.0138 per 21-document run, so $0.0005 to $0.0007 per document, and it varies run to run. Extrapolated to the 4,200-document backlog that is about $2 to $3 of model cost and about 7 hours of serial machine time. Both are extrapolations from 21 documents, not measurements at scale. The cost including people reviewing escalations ($3 to $7 per document on this sample) is an assumption.
+  - **Tokens:** I did not log tokens per document. One recorded call (Acme, first run) used 2,461 cache-creation input tokens and 1,344 output tokens, 582 of them thinking tokens. The model also returns a long `notes` field that the pipeline does not use, so trimming the output and the thinking are the obvious cost levers; I did not tune them.
+- **Final KPI summary:** [`KPI_SUMMARY.md`](KPI_SUMMARY.md). Raw evidence: `out/eval_report.json` (latest scoring), `out/eval_history.jsonl` (one line per scored run), `out/stability_report.json` (4 runs after the DPA fix) and `out/stability_report_before_dpa_fix.json` (the 2 flips).
 
 ## 8. Surprises in the data
 Each trap I found (duplicates, conflicts, injection text, odd currencies, missing DPA, CSV overlap), how I detected it, and what the system does about it.
@@ -160,22 +261,14 @@ Each trap I found (duplicates, conflicts, injection text, odd currencies, missin
 
 ## 9. Daily log (a few lines each, written same day)
 - **2026-11-05:** Created `BUILD_TRAIL.md` outline and `.venv` (details not logged at the time).
+- **2026-11-08:** Done: Claude read the brief, kickoff, submission rules, policy, schema; drafted the 5-day plan and architecture (D-001, D-002); filled §2. Blocked: nothing. Next: read `current_state.docx`, `mock_erp/app.py`, `results.schema.json`; read all 22 inputs and hand-label expected actions; run `selfcheck.py`; start the ERP and hit `/health`.
 - **2026-11-09:** Done: installed `pypdf`, `python-docx`, `anthropic` in `.venv`; wrote `src/ingest.py` (PDF/DOCX/EML/CSV to text, works on all 21 files); read every input and the ERP code; hand-labelled all 22 inputs in `eval/expected.json` (12 load, 9 escalate, 2 quarantine among documents, plus CSV rows: 4 merged, 3 escalated); logged D-003, D-004 and the surprises table. Blocked: `ANTHROPIC_API_KEY` not set. Next: set the key, build the thin slice on one document, start the ERP and run `selfcheck.py`. Note: `README.md` is a 2-line stub, the real brief is `README 2.md`; move it before writing the real README.
 - **2026-11-09 (later):** Thin slice works for `001_acme_msa.pdf`: `claude -p` (Haiku, forced `--json-schema`, tools off, neutral cwd) to raw facts, then `policy.py` builds the record and decides, then validate locally, then POST. Acme loaded as MEDIUM/NA/dpa true, matching `eval/expected.json`. About 8 s and $0.0007 per document, metered by Claude Code (`total_cost_usd`), so the cost KPI is measured, not estimated (this corrects D-006). Files: `src/{ingest,extract,policy,erp,run}.py`. Next: run the other 21, then duplicate/CSV reconciliation and the eval harness.
-- **2026-11-09 (evening):** Ran all 21 documents through the pipeline (`python src/run.py --reset --all`, about 2.5 min, $0.011 total, about $0.0005 per document metered). First pass matched 15/21 expected actions; after prompt and schema fixes, 21/21 actions and all but two fields matched (see iteration log #2-#6). Not yet built: duplicate/conflict reconciliation (008/009 currently escalate for DPA, not the $40k/$44k conflict), CSV handling, eval harness script, `results.json`.
+- **2026-11-09 (evening):** Ran all 21 documents through the pipeline (`python src/run.py --reset --all`, about 2.5 min, $0.011 total, about $0.0005 per document metered). First pass matched 17/21 expected actions (misses: 003, 006, 013, 020); after prompt and schema fixes, 21/21 actions and all but two fields matched (see iteration log #2-#6). Not yet built: duplicate/conflict reconciliation (008/009 currently escalate for DPA, not the $40k/$44k conflict), CSV handling, eval harness script, `results.json`.
 - **2026-11-09 (night):** Built `src/reconcile.py` and restructured `src/run.py` (analyze, reconcile, act), plus `tests/test_reconcile.py` (8 unit tests, no model needed). Full runs with the CSV: 28 of 28 decisions match my labels, identical across two runs. ERP ends with 10 loaded and 14 escalations or quarantines. Not done: eval harness script, `results.json`, ARCHITECTURE.md, real README, demo, refresh of KPI_SUMMARY.md. Next: write `results.json` from the audit log, then the eval script.
 - **2026-11-09 (late):** Wrote `results.json` (generated by the runner, validated by `selfcheck.py`: no failures) and `src/evaluate.py`, which scores a run against `eval/expected.json` and checks the hard guardrails on the artifact itself. Negative test: a doctored results file (Stark and Soylent force-loaded, one field corrupted) is caught with exit code 1. First eval row recorded in section 7. Next: ARCHITECTURE.md, real README, refresh KPI_SUMMARY.md, more stability runs, demo.
 - **2026-11-09 (end of day):** Stability check found 2 of 4 runs flipping a clean contract to escalate (DPA wording). Replaced the model's DPA call with a deterministic text rule, added tests, re-ran: 4 of 4 runs 28/28, no flips. Refreshed `KPI_SUMMARY.md` with measured numbers. `results.json` regenerated and `selfcheck.py` shows no failures (2 warnings: ARCHITECTURE.md, demo). Remaining: ARCHITECTURE.md, real README, demo, final integrity checklist, zip and submit. Added `src/stability.py`.
-- **2026-11-11:** Done: answered "are we conducting failure handling properly?" by fault injection; found the ERP-down crash and the silently ignored rejected escalation; fixed them (D-010, iteration #12); added `tests/test_failure_handling.py` (15 tests, 25 in total, all pass, no network or model needed); full real run unchanged at 28/28; corrected ARCHITECTURE.md / README / KPI_SUMMARY.md / DEMO_SCRIPT.md. Cost per document varies run to run ($0.0005-0.0007), so the KPI now says so. `selfcheck.py` passes. Remaining: record demo and add the link to README, fill Summary / total hours / Tools line / Integrity checklist here, exclude `.claude/` from the zip, decide on `docs/BRIEF.md`, one last full run after the demo, zip, link test in incognito, submit.
-- **2026-11-10:** Done: rewrote `ARCHITECTURE.md` with a colour-coded Mermaid pipeline diagram (analyze / reconcile / act phases, amber = the only model step), a collapsed plain-text fallback, a "who decides what" table and a policy-precedence table; I could not render Mermaid here, so it is unverified until previewed. Ran the final pre-submission sweep: checksums OK, 9 then 10 unit tests pass, eval 28/28, results.json equals ERP state, secrets scan clean, zip contents about 0.45 MB; it surfaced the Word lock-file bug (iteration #11). Added reviewer-facing DPA reason text (D-009) and re-ran the full pipeline so `results.json` and `out/audit.jsonl` match. Known: `selfcheck.py` fails whenever a document is open in Word (lock file in `data/contracts/`); close the file and re-run. Blocked: nothing. Remaining: record demo and add the link to README, fill Summary / total hours / Tools line / Integrity checklist here, exclude `.claude/` from the zip, decide on `docs/BRIEF.md`, do one last full run after the demo, zip, test OneDrive link in incognito, submit. Not done: fresh-environment test of the README install steps; no test zip built.
 - **2026-11-09 (docs):** Wrote `ARCHITECTURE.md`, a real `README.md` (the brief now lives in `docs/BRIEF.md`), `requirements.txt` and `docs/DEMO_SCRIPT.md`. Noticed `selfcheck.py` counts any "http" in the README as a demo link, so its demo check passes falsely (my README mentions localhost); the real demo is still not recorded. Remaining: record the demo and add the link, fill the Summary and Integrity checklist sections here, final full run plus evaluate, zip, link test, submit. Order matters: `--csv`/`--all` runs overwrite `out/audit.jsonl`, so record the demo first and do the last full run just before zipping.
-- **2026-11-08:** Done: Claude read the brief, kickoff, submission rules, policy, schema; drafted the 5-day plan and architecture (D-001, D-002); filled §2. Blocked: nothing. Next: read `current_state.docx`, `mock_erp/app.py`, `results.schema.json`; read all 22 inputs and hand-label expected actions; run `selfcheck.py`; start the ERP and hit `/health`.
-
-## 10. What I'd harden with more time
-- ...
-
-## 11. Integrity checklist (before submitting)
-- [ ] `mock_erp/` and `schema/` untouched (checksums verified)
-- [ ] `selfcheck.py` passes on final `results.json`
-- [ ] Every document has exactly one decision with a rationale
-- [ ] README, architecture note, KPI summary and demo included
+- **2026-11-09 (late, final sweep):** Ran the final pre-submission sweep: checksums OK, unit tests pass, eval 28/28, results.json equals ERP state, secrets scan clean, zip contents about 0.45 MB. It surfaced the Word lock-file bug (iteration #11); `selfcheck.py` failed until the lock files were skipped and the files closed in Word. Also verified both schemas independently.
+- **2026-11-10:** Done: rewrote `ARCHITECTURE.md` with a colour-coded Mermaid pipeline diagram (analyze / reconcile / act phases, amber = the only model step), a collapsed plain-text fallback, a "who decides what" table and a policy-precedence table; I could not render Mermaid here, so it is unverified until previewed. Added reviewer-facing DPA reason text (D-009) and re-ran the full pipeline so `results.json` and `out/audit.jsonl` match. Known: `selfcheck.py` fails whenever a document is open in Word (lock file in `data/contracts/`); close the file and re-run. Blocked: nothing. Remaining: record demo and add the link to README, fill Summary / total hours / Tools line / Integrity checklist here, exclude `.claude/` from the zip, decide on `docs/BRIEF.md`, do one last full run after the demo, zip, test OneDrive link in incognito, submit. Not done: fresh-environment test of the README install steps; no test zip built. Late on 11-10, asked whether failure handling was proper; fault injection found two gaps (P-003, E-004).
+- **2026-11-11:** Done: fixed the failure-handling gaps found by fault injection on 11-10 (ERP-down crash, silently ignored rejected escalation; P-003, D-010, iteration #12); added `tests/test_failure_handling.py` (15 tests, 25 in total, all pass, no network or model needed); full real run unchanged at 28/28; corrected ARCHITECTURE.md / README / KPI_SUMMARY.md / DEMO_SCRIPT.md. Cost per document varies run to run ($0.0005-0.0007), so the KPI now says so. `selfcheck.py` passes. Remaining: record demo and add the link to README, fill Summary / total hours / Tools line / Integrity checklist here, exclude `.claude/` from the zip, decide on `docs/BRIEF.md`, one last full run after the demo, zip, link test in incognito, submit.
