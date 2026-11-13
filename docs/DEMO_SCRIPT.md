@@ -28,11 +28,12 @@ pace; pause on the table. Round the numbers aloud, the table carries the exact v
 
 **Say:**
 
-> Hi, I'm Dany, a software engineer in the ATC practice. This is my solution to the Atlas Data Room challenge.
+> Hi, I'm Dany, I'm a software engineer in the ATC practice and this is my solution to the Atlas Data Room challenge.
 >
-> *(show the baseline table)* Atlas inherited about 4,200 vendor contracts, and today eight analysts work through them by hand: roughly 160 a day, about thirteen dollars each, with around six percent of fields wrong. Clearing the backlog takes about 25 working days. Every document is touched by a person, and nobody records why a decision was made.
->
-> That matters because some of these contracts are risky: a multi-million-dollar liability cap, or text inside a document that tries to instruct an automated system.
+> *(show the baseline table)* So Atlas inherited about 4,200 vendor documents in every format
+> Today, 8 analysts work through them by hand.
+> They are getting through roughly 160 documents a day costing about $13 per document, with about a 6% error rate.
+> Clearing the backlog takes about 25 working days. Every document is touched by a person, and nobody records why a decision was made.
 >
 > So I built an agent that reads each document, decides to load, escalate or quarantine, and writes down why. In the next few minutes I'll show how it works, the hard cases in the provided synthetic data, and the measured results against these baselines.
 
@@ -44,11 +45,24 @@ Notes:
 
 ## 1:00-2:00  Architecture in one picture
 
-Show: the diagram in `ARCHITECTURE.md`.
+Show: the diagram in `ARCHITECTURE.md`, full screen. Move the cursor along it in the order you
+speak: top to bottom, one phase at a time. Point at the single amber box when you say "that's the
+only place AI touches the data".
 
 **Say:**
 
-> Here's how it works. The principle is: the LLM extracts, code decides. Claude reads each messy document and reports facts only: what the DPA sentence says, whether a liability cap is stated, whether the text is trying to instruct a system. It never chooses load, escalate or quarantine. Python does. It turns those facts into a record, converts currencies to dollars for the threshold checks, sets the risk tier and region, and applies the policy, most restrictive rule wins. So a document can't argue its way past the policy. A reconcile step then handles duplicates and the legacy CSV, and only after every document is decided does anything go to the ERP. Extraction runs on Claude Code in headless mode, so there's no API key and the cost is metered per call.
+> Here's how it works: three steps, and one rule. The AI reads. Code decides.
+>
+> Step one, analyze. Each document goes in as text. Claude reads it and reports facts only: what the DPA sentence says, whether a liability cap is stated, whether the text is trying to give orders to a system. That's the only amber box. Everything in blue is plain Python: it turns those facts into a record, converts currencies to dollars, sets the risk tier, and applies the policy. The most restrictive rule always wins.
+>
+> Step two, reconcile. Now it looks across documents for duplicates and conflicts, and matches the legacy CSV.
+>
+> Step three, act. Only now does anything touch the ERP. Clean records are checked and loaded; everything else goes to review, with the reason logged.
+>
+> So a document can't argue its way past the policy, because it never talks to the part that decides.
+
+Optional extra sentence if you have time: "Extraction runs on Claude Code in headless mode, so there's no API
+key, and the cost is metered on every call."
 
 ## 2:00-3:00  The run and the headline result
 
